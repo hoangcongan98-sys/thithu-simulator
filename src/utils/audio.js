@@ -143,7 +143,79 @@ export function playFailSound() {
   });
 }
 
-// Text-to-speech function for Vietnamese
+// Cache for the best Vietnamese voice found
+let cachedViVoice = null;
+let voiceSearchDone = false;
+
+/**
+ * Find the best female Northern Vietnamese voice available.
+ * Priority order:
+ *   1. Microsoft HoaiMy (Edge - Natural female Northern Vietnamese)
+ *   2. Microsoft An (Edge - older female Vietnamese)
+ *   3. Google tiếng Việt (Chrome - female Vietnamese)
+ *   4. Any Vietnamese voice with "female" in name
+ *   5. Any vi-VN voice
+ *   6. Any voice starting with "vi"
+ */
+function findBestVietnameseVoice() {
+  if (voiceSearchDone && cachedViVoice) return cachedViVoice;
+
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) return null;
+
+  // Priority keywords for female Northern Vietnamese voices (ranked)
+  const priorityNames = [
+    'hoaimy',
+    'an ',
+    'google tiếng việt',
+    'google vi',
+    'linh',
+    'mai',
+  ];
+
+  // Step 1: Filter Vietnamese voices only
+  const viVoices = voices.filter(v =>
+    v.lang === 'vi-VN' || v.lang === 'vi' || v.lang.startsWith('vi-')
+  );
+
+  if (viVoices.length === 0) {
+    voiceSearchDone = true;
+    return null;
+  }
+
+  // Step 2: Try to match priority names (best match first)
+  for (const keyword of priorityNames) {
+    const match = viVoices.find(v =>
+      v.name.toLowerCase().includes(keyword)
+    );
+    if (match) {
+      cachedViVoice = match;
+      voiceSearchDone = true;
+      console.log(`[TTS] Selected voice: "${match.name}" (${match.lang})`);
+      return match;
+    }
+  }
+
+  // Step 3: Prefer female voices (by name heuristic)
+  const femaleKeywords = ['female', 'woman', 'nữ', 'girl'];
+  const femaleVoice = viVoices.find(v =>
+    femaleKeywords.some(kw => v.name.toLowerCase().includes(kw))
+  );
+  if (femaleVoice) {
+    cachedViVoice = femaleVoice;
+    voiceSearchDone = true;
+    console.log(`[TTS] Selected female voice: "${femaleVoice.name}" (${femaleVoice.lang})`);
+    return femaleVoice;
+  }
+
+  // Step 4: Fallback to first Vietnamese voice
+  cachedViVoice = viVoices[0];
+  voiceSearchDone = true;
+  console.log(`[TTS] Fallback voice: "${viVoices[0].name}" (${viVoices[0].lang})`);
+  return viVoices[0];
+}
+
+// Text-to-speech function for Vietnamese (female, Northern accent)
 export function speak(text, rate = 1.0) {
   return new Promise((resolve) => {
     if (!('speechSynthesis' in window)) {
@@ -158,14 +230,13 @@ export function speak(text, rate = 1.0) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'vi-VN';
     utterance.rate = rate;
-    utterance.pitch = 1.0;
+    utterance.pitch = 1.1;   // Slightly higher pitch for feminine tone
     utterance.volume = 1.0;
 
-    // Try to find a Vietnamese voice
-    const voices = window.speechSynthesis.getVoices();
-    const viVoice = voices.find(v => v.lang.startsWith('vi'));
-    if (viVoice) {
-      utterance.voice = viVoice;
+    // Select the best Vietnamese female voice
+    const voice = findBestVietnameseVoice();
+    if (voice) {
+      utterance.voice = voice;
     }
 
     utterance.onend = resolve;
@@ -174,3 +245,19 @@ export function speak(text, rate = 1.0) {
     window.speechSynthesis.speak(utterance);
   });
 }
+
+// Pre-load voices (some browsers load asynchronously)
+export function preloadVoices() {
+  if (!('speechSynthesis' in window)) return;
+
+  // Force voice list load
+  window.speechSynthesis.getVoices();
+
+  // Listen for async voice loading
+  window.speechSynthesis.onvoiceschanged = () => {
+    voiceSearchDone = false; // Reset cache to re-search
+    cachedViVoice = null;
+    findBestVietnameseVoice();
+  };
+}
+

@@ -6,18 +6,13 @@ import {
   playSuccessSound,
   playFailSound,
   speak,
+  preloadVoices,
 } from '../utils/audio';
 
 export function useAudio() {
-  // Pre-load voices
+  // Pre-load Vietnamese voices on mount
   useEffect(() => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-      // Some browsers need this event to load voices
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
-    }
+    preloadVoices();
   }, []);
 
   const playCommand = useCallback(async (commandText) => {
